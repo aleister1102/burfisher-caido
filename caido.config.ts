@@ -4,7 +4,7 @@ export default defineConfig({
   id: "burfisher",
   name: "Burfisher",
   description: "Scan HTTP traffic for exposed secrets using MongoDB Kingfisher",
-  version: "0.1.0",
+  version: "1.0.4",
   author: {
     name: "insomnia1102",
     url: "https://github.com/aleister1102/burfisher-caido",
