@@ -1,0 +1,25 @@
+{
+  "name": "@caido-community/burfisher",
+  "version": "0.1.0",
+  "author": "aleister1102",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "caido-dev",
+    "watch": "caido-dev watch",
+    "build": "caido-dev build",
+    "package": "caido-dev build",
+    "lint": "eslint src --ext .ts,.vue",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@caido/sdk-frontend": "^0.54.1",
+    "@caido/sdk-backend": "^0.54.1",
+    "@caido-community/dev": "^0.1.6",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
