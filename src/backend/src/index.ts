@@ -25,7 +25,7 @@ export async function init(sdk: SDK) {
         return [];
       }
 
-      sdkInstance.console.log(`[Burfisher] API: scanRequests started for ${ids.length} requests`);
+      sdkInstance.console.log(`[Caidofisher] API: scanRequests started for ${ids.length} requests`);
       const results = await scanner.scan(sdkInstance, ids);
 
       // Store findings
@@ -39,12 +39,12 @@ export async function init(sdk: SDK) {
 
       const duration = Date.now() - start;
       sdkInstance.console.log(
-        `[Burfisher] API: scanRequests finished in ${duration}ms. Added ${newFindingsCount} findings to store.`
+        `[Caidofisher] API: scanRequests finished in ${duration}ms. Added ${newFindingsCount} findings to store.`
       );
 
       return results;
     } catch (error: unknown) {
-      sdkInstance.console.error("[Burfisher] API: scanRequests failed:", error);
+      sdkInstance.console.error("[Caidofisher] API: scanRequests failed:", error);
       throw error;
     }
   });
@@ -52,7 +52,7 @@ export async function init(sdk: SDK) {
   // Register API: getFindings
   api.register("getFindings", async (sdkInstance: SDK) => {
     const findings = findingsStore.getAll();
-    sdkInstance.console.log(`[Burfisher] API: getFindings returning ${findings.length} items`);
+    sdkInstance.console.log(`[Caidofisher] API: getFindings returning ${findings.length} items`);
     return findings;
   });
 
@@ -60,13 +60,13 @@ export async function init(sdk: SDK) {
   api.register("clearFindings", async (sdkInstance: SDK) => {
     const count = findingsStore.getAll().length;
     findingsStore.clear();
-    sdkInstance.console.log(`[Burfisher] API: clearFindings removed ${count} items.`);
+    sdkInstance.console.log(`[Caidofisher] API: clearFindings removed ${count} items.`);
   });
 
   // Register API: exportFindings
   api.register("exportFindings", async (sdkInstance: SDK) => {
     const findings = findingsStore.getAll();
-    sdkInstance.console.log(`[Burfisher] API: exportFindings exporting ${findings.length} items`);
+    sdkInstance.console.log(`[Caidofisher] API: exportFindings exporting ${findings.length} items`);
     return JSON.stringify(findings, null, 2);
   });
 
@@ -74,7 +74,7 @@ export async function init(sdk: SDK) {
   api.register("getStats", async (sdkInstance: SDK) => {
     const stats = findingsStore.getStats();
     const version = await scanner.getVersion();
-    sdkInstance.console.log(`[Burfisher] API: getStats (Findings: ${stats.totalFindings}, Scanned: ${stats.totalScanned}, Kingfisher: ${version || "N/A"})`);
+    sdkInstance.console.log(`[Caidofisher] API: getStats (Findings: ${stats.totalFindings}, Scanned: ${stats.totalScanned}, Kingfisher: ${version || "N/A"})`);
     return {
       ...stats,
       kingfisherVersion: version,
@@ -83,21 +83,21 @@ export async function init(sdk: SDK) {
 
   // Register API: installKingfisher
   api.register("installKingfisher", async (sdkInstance: SDK) => {
-    sdkInstance.console.log("[Burfisher] API: installKingfisher started");
+    sdkInstance.console.log("[Caidofisher] API: installKingfisher started");
     const start = Date.now();
     const result = await scanner.installKingfisher(sdkInstance);
     const duration = Date.now() - start;
-    sdkInstance.console.log(`[Burfisher] API: installKingfisher finished in ${duration}ms (Success: ${result.success})`);
+    sdkInstance.console.log(`[Caidofisher] API: installKingfisher finished in ${duration}ms (Success: ${result.success})`);
     return result;
   });
 
   // Check Kingfisher availability on startup
   try {
     const version = await scanner.getVersion();
-    sdk.console.log(`[Burfisher] Backend initialized. Kingfisher version: ${version || "not found"}`);
+    sdk.console.log(`[Caidofisher] Backend initialized. Kingfisher version: ${version || "not found"}`);
   } catch (error) {
-    sdk.console.warn("[Burfisher] Kingfisher binary not found. Install will be attempted on first scan.");
+    sdk.console.warn("[Caidofisher] Kingfisher binary not found. Install will be attempted on first scan.");
   }
 
-  sdk.console.log("[Burfisher] Backend ready.");
+  sdk.console.log("[Caidofisher] Backend ready.");
 }

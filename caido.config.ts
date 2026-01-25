@@ -1,28 +1,28 @@
 import { defineConfig } from "@caido-community/dev";
 
 export default defineConfig({
-  id: "burfisher",
-  name: "Burfisher",
+  id: "caidofisher",
+  name: "Caidofisher",
   description: "Scan HTTP traffic for exposed secrets using MongoDB Kingfisher",
   version: "1.0.4",
   author: {
     name: "insomnia1102",
-    url: "https://github.com/aleister1102/burfisher-caido",
+    url: "https://github.com/aleister1102/caidofisher-caido",
   },
   plugins: [
     {
       kind: "frontend",
-      id: "burfisher-frontend",
-      name: "Burfisher UI",
+      id: "caidofisher-frontend",
+      name: "Caidofisher UI",
       root: "./src/frontend",
       backend: {
-        id: "burfisher-backend",
+        id: "caidofisher-backend",
       },
     },
     {
       kind: "backend",
-      id: "burfisher-backend",
-      name: "Burfisher Backend",
+      id: "caidofisher-backend",
+      name: "Caidofisher Backend",
       root: "./src/backend",
     },
   ],

@@ -1,27 +1,27 @@
 {
-  "id": "burfisher",
-  "name": "Burfisher",
+  "id": "caidofisher",
+  "name": "Caidofisher",
   "version": "1.0.4",
   "description": "Scan HTTP traffic for exposed secrets using MongoDB Kingfisher",
   "author": {
     "name": "insomnia1102",
     "email": "marucube35@gmail.com",
-    "url": "https://github.com/aleister1102/burfisher-caido"
+    "url": "https://github.com/aleister1102/caidofisher-caido"
   },
   "plugins": [
     {
       "kind": "frontend",
-      "id": "burfisher-frontend",
-      "name": "Burfisher UI",
+      "id": "caidofisher-frontend",
+      "name": "Caidofisher UI",
       "entrypoint": "dist/frontend/index.js",
       "backend": {
-        "id": "burfisher-backend"
+        "id": "caidofisher-backend"
       }
     },
     {
       "kind": "backend",
-      "id": "burfisher-backend",
-      "name": "Burfisher Backend",
+      "id": "caidofisher-backend",
+      "name": "Caidofisher Backend",
       "runtime": "javascript",
       "entrypoint": "dist/backend/index.js"
     }

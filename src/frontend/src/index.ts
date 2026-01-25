@@ -1,8 +1,8 @@
 import type { Caido, CommandContext } from "@caido/sdk-frontend";
 import type { KingfisherBackendAPI, Finding, PluginStats } from "../../shared/types";
 
-const COMMAND_ID = "burfisher.scan";
-const SIDEBAR_PATH = "/burfisher";
+const COMMAND_ID = "caidofisher.scan";
+const SIDEBAR_PATH = "/caidofisher";
 
 type KingfisherCaido = Caido<KingfisherBackendAPI>;
 
@@ -53,20 +53,20 @@ export const init = (caido: KingfisherCaido) => {
 
   // Register the scan command
   caido.commands.register(COMMAND_ID, {
-    name: "Scan with Burfisher",
+    name: "Scan with Caidofisher",
     run: async (context: CommandContext) => {
       const requestIds = collectRequestIds(context);
-      caido.log.debug(`[Burfisher] Scan command invoked, context type: ${context.type}`);
+      caido.log.debug(`[Caidofisher] Scan command invoked, context type: ${context.type}`);
       addLog("debug", `Scan command invoked, context type: ${context.type}`);
 
       if (requestIds.length === 0) {
-        caido.log.warn("[Burfisher] No requests selected to scan.");
+        caido.log.warn("[Caidofisher] No requests selected to scan.");
         caido.window.showToast("No requests selected to scan.", { variant: "warning" });
         addLog("warn", "No requests selected to scan.");
         return;
       }
 
-      caido.log.info(`[Burfisher] Scanning ${requestIds.length} request(s): ${requestIds.join(", ")}`);
+      caido.log.info(`[Caidofisher] Scanning ${requestIds.length} request(s): ${requestIds.join(", ")}`);
       caido.window.showToast(`Scanning ${requestIds.length} request(s)...`, { variant: "info" });
       addLog("info", `Initiating scan for ${requestIds.length} request(s)...`);
       isScanning = true;
@@ -78,7 +78,7 @@ export const init = (caido: KingfisherCaido) => {
         const duration = Date.now() - start;
         const totalFindings = results.reduce((sum, r) => sum + r.findings.length, 0);
 
-        caido.log.info(`[Burfisher] Scan complete: ${totalFindings} finding(s) in ${results.length} request(s) (${duration}ms)`);
+        caido.log.info(`[Caidofisher] Scan complete: ${totalFindings} finding(s) in ${results.length} request(s) (${duration}ms)`);
         addLog("info", `Scan complete: Found ${totalFindings} finding(s) in ${results.length} request(s) (${duration}ms)`);
         
         // Show raw output from the first result (it's the same for all in a batch)
@@ -98,7 +98,7 @@ export const init = (caido: KingfisherCaido) => {
         addLog("debug", "Refreshing dashboard after scan...");
         dashboard.refresh();
       } catch (error) {
-        caido.log.error(`[Burfisher] Scan failed for requests ${requestIds.join(", ")}:`, error);
+        caido.log.error(`[Caidofisher] Scan failed for requests ${requestIds.join(", ")}:`, error);
         caido.window.showToast("Scan failed. Check console for details.", { variant: "error" });
         addLog("error", `Scan failed: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
@@ -108,29 +108,29 @@ export const init = (caido: KingfisherCaido) => {
   });
 
   // Register context menu items
-  caido.log.debug("[Burfisher] Registering context menu items");
+  caido.log.debug("[Caidofisher] Registering context menu items");
   caido.menu.registerItem({ type: "RequestRow", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
   caido.menu.registerItem({ type: "Request", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
   caido.menu.registerItem({ type: "Response", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
 
   // Register sidebar item
-  caido.log.debug("[Burfisher] Registering sidebar item");
-  caido.sidebar.registerItem("Burfisher", SIDEBAR_PATH, {
+  caido.log.debug("[Caidofisher] Registering sidebar item");
+  caido.sidebar.registerItem("Caidofisher", SIDEBAR_PATH, {
     icon: "fas fa-shield-halved",
     group: "Plugins",
   });
 
-  // Register command to open Burfisher UI
-  const OPEN_UI_COMMAND = "burfisher.openUI";
+  // Register command to open Caidofisher UI
+  const OPEN_UI_COMMAND = "caidofisher.openUI";
   caido.commands.register(OPEN_UI_COMMAND, {
-    name: "Burfisher: Open Dashboard",
+    name: "Caidofisher: Open Dashboard",
     run: () => {
       caido.navigation.goTo(SIDEBAR_PATH);
     },
   });
   caido.commandPalette.register(OPEN_UI_COMMAND);
 
-  caido.log.info("Burfisher frontend loaded.");
+  caido.log.info("Caidofisher frontend loaded.");
 };
 
 /**
@@ -138,7 +138,7 @@ export const init = (caido: KingfisherCaido) => {
  */
 function createDashboard(caido: KingfisherCaido) {
   const container = document.createElement("div");
-  container.className = "burfisher-dashboard";
+  container.className = "caidofisher-dashboard";
 
   // Inject styles
   const style = document.createElement("style");
@@ -152,7 +152,7 @@ function createDashboard(caido: KingfisherCaido) {
     <div class="kf-header-left">
       <i class="fas fa-shield-halved kf-logo"></i>
       <div>
-        <h1>Burfisher</h1>
+        <h1>Caidofisher</h1>
         <p class="kf-subtitle">Secrets scanner powered by MongoDB Kingfisher</p>
       </div>
     </div>
@@ -264,14 +264,14 @@ function createDashboard(caido: KingfisherCaido) {
   emptyState.innerHTML = `
     <i class="fas fa-search"></i>
     <h3>No findings yet</h3>
-    <p>Right-click on requests in History and select "Scan with Burfisher" to start.</p>
+    <p>Right-click on requests in History and select "Scan with Caidofisher" to start.</p>
   `;
   container.appendChild(emptyState);
 
   let selectedFinding: Finding | null = null;
 
   async function refresh() {
-    caido.log.debug("[Burfisher] Refreshing findings dashboard");
+    caido.log.debug("[Caidofisher] Refreshing findings dashboard");
     addLog("debug", "Refreshing findings dashboard...");
     try {
       addLog("debug", "Fetching findings from backend...");
@@ -285,7 +285,7 @@ function createDashboard(caido: KingfisherCaido) {
       render();
       addLog("debug", "Dashboard render complete.");
     } catch (error) {
-      caido.log.error("[Burfisher] Failed to refresh findings:", error);
+      caido.log.error("[Caidofisher] Failed to refresh findings:", error);
       addLog("error", `Failed to refresh dashboard: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -428,7 +428,7 @@ function createDashboard(caido: KingfisherCaido) {
   // Event handlers
   clearBtn.addEventListener("click", async () => {
     if (!confirm("Clear all findings?")) return;
-    caido.log.info("[Burfisher] Clearing all findings");
+    caido.log.info("[Caidofisher] Clearing all findings");
     addLog("info", "Clearing all findings");
     await caido.backend.clearFindings();
     await refresh();
@@ -436,14 +436,14 @@ function createDashboard(caido: KingfisherCaido) {
   });
 
   exportBtn.addEventListener("click", async () => {
-    caido.log.info("[Burfisher] Exporting findings to JSON");
+    caido.log.info("[Caidofisher] Exporting findings to JSON");
     addLog("info", "Exporting findings to JSON");
     const json = await caido.backend.exportFindings();
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `burfisher-findings-${Date.now()}.json`;
+    a.download = `caidofisher-findings-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     caido.window.showToast("Exported findings", { variant: "success" });
@@ -465,7 +465,7 @@ function createDashboard(caido: KingfisherCaido) {
       }
       await refresh();
     } catch (error) {
-      caido.log.error("[Burfisher] Install failed:", error);
+      caido.log.error("[Caidofisher] Install failed:", error);
       addLog("error", `Installation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
@@ -502,7 +502,7 @@ function formatRelativeTime(timestamp: number): string {
 
 function getDashboardStyles(): string {
   return `
-    .burfisher-dashboard {
+    .caidofisher-dashboard {
       padding: 24px;
       width: 100%;
       min-height: 100%;

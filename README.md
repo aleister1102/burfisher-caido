@@ -1,4 +1,4 @@
-# Burfisher
+# Caidofisher
 
 A Caido plugin that integrates the [MongoDB Kingfisher](https://github.com/mongodb/kingfisher) secrets scanner. Port of [Burfisher](https://github.com/aleister1102/burfisher) from Burp Suite to Caido.
 
@@ -19,14 +19,14 @@ A Caido plugin that integrates the [MongoDB Kingfisher](https://github.com/mongo
 
 ### Install Plugin
 
-1. Download the latest `burfisher-plugin.zip` from Releases
+1. Download the latest `caidofisher-plugin.zip` from Releases
 2. In Caido, go to **Settings → Plugins → Local**
 3. Click **Install from file** and select the zip
 
 Or build from source:
 
 ```bash
-cd plugins/Burfisher
+cd plugins/Caidofisher
 pnpm install
 pnpm run build
 ```
@@ -37,8 +37,8 @@ pnpm run build
 
 1. Open **HTTP History** or any view with HTTP requests
 2. Select one or more requests
-3. Right-click and select **Scan with Burfisher**
-4. View results in the **Burfisher** sidebar panel
+3. Right-click and select **Scan with Caidofisher**
+4. View results in the **Caidofisher** sidebar panel
 
 ### Dashboard
 
@@ -80,14 +80,22 @@ Currently, the plugin uses Kingfisher's default settings. Future versions may in
 
 ### Kingfisher Binary Not Found
 
-Burfisher will attempt to auto-install Kingfisher on first use. If installation fails:
+Caidofisher will attempt to auto-install Kingfisher on first use. If installation fails:
 
+#### macOS / Linux
 ```bash
 # Manual install
 curl -sL https://raw.githubusercontent.com/mongodb/kingfisher/main/scripts/install-kingfisher.sh | bash
 ```
 
 Ensure `~/.local/bin` is in your PATH.
+
+#### Windows
+Caidofisher will download the `kingfisher-windows-x64.zip` and extract it to `%USERPROFILE%\.local\bin\kingfisher.exe`.
+
+If auto-install fails, you can:
+1. Download `kingfisher-windows-x64.zip` from [Kingfisher Releases](https://github.com/mongodb/kingfisher/releases)
+2. Extract `kingfisher.exe` to a folder on your PATH (or to `%USERPROFILE%\.local\bin\`)
 
 ### Scan Timeout
 

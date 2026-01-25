@@ -1,3 +1,9 @@
+import * as os from "os";
+import * as path from "path";
+import { writeFile, unlink, access, mkdir } from "fs/promises";
+import { constants } from "fs";
+import { spawn } from "child_process";
+
 import type { SDK } from "caido:plugin";
 import type {
   Finding,
@@ -7,15 +13,30 @@ import type {
 
 const BATCH_SIZE = 50;
 const SCAN_TIMEOUT_MS = 120_000;
-const KINGFISHER_LOCAL_PATH = "~/.local/bin/kingfisher";
 
 /**
- * Kingfisher binary integration for Burfisher plugin.
+ * Kingfisher binary integration for Caidofisher plugin.
  * Handles detection, installation, and execution.
  */
 export class KingfisherScanner {
   private binaryPath: string | null = null;
   private version: string | null = null;
+
+  private get isWindows() {
+    return os.platform() === "win32";
+  }
+
+  private get binaryName() {
+    return this.isWindows ? "kingfisher.exe" : "kingfisher";
+  }
+
+  private get installDir() {
+    return path.join(os.homedir(), ".local", "bin");
+  }
+
+  private get tempDir() {
+    return os.tmpdir();
+  }
 
   /**
    * Get Kingfisher version (and cache binary path)
@@ -35,6 +56,79 @@ export class KingfisherScanner {
       return this.version;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Install or upgrade Kingfisher binary
+   */
+  async installKingfisher(sdk: SDK): Promise<{ success: boolean; output: string }> {
+    sdk.console.log("[Caidofisher] Attempting to install/upgrade Kingfisher binary...");
+    try {
+      if (this.isWindows) {
+        return await this.installWindows(sdk);
+      }
+
+      const result = await this.exec([
+        "curl -sL https://raw.githubusercontent.com/mongodb/kingfisher/main/scripts/install-kingfisher.sh | bash",
+      ]);
+
+      const output = result.stdout + (result.stderr ? "\nSTDERR:\n" + result.stderr : "");
+      
+      const installed = await this.findBinary();
+      if (installed) {
+        this.binaryPath = installed;
+        this.version = null; // Reset version to force re-detection
+        const newVersion = await this.getVersion();
+        sdk.console.log(`[Caidofisher] Kingfisher installed successfully at ${installed} (v${newVersion})`);
+        return { success: true, output: `Successfully installed Kingfisher v${newVersion}\n\n${output}` };
+      }
+
+      return { success: false, output: `Installation failed: binary not found after script execution\n\n${output}` };
+    } catch (error: any) {
+      const msg = error instanceof Error ? error.message : String(error);
+      sdk.console.error("[Caidofisher] Kingfisher installation failed:", msg);
+      return { success: false, output: `Installation failed: ${msg}` };
+    }
+  }
+
+  private async installWindows(sdk: SDK): Promise<{ success: boolean; output: string }> {
+    const installDir = this.installDir;
+    const zipPath = path.join(this.tempDir, "kingfisher-windows.zip");
+    const extractDir = path.join(this.tempDir, `kingfisher-extract-${Date.now()}`);
+    
+    try {
+      await mkdir(installDir, { recursive: true });
+      await mkdir(extractDir, { recursive: true });
+
+      sdk.console.log("[Caidofisher] Downloading Kingfisher for Windows...");
+      const response = await fetch("https://github.com/mongodb/kingfisher/releases/latest/download/kingfisher-windows-x64.zip");
+      if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
+      
+      const arrayBuffer = await response.arrayBuffer();
+      await writeFile(zipPath, Buffer.from(arrayBuffer));
+
+      sdk.console.log("[Caidofisher] Extracting Kingfisher...");
+      await this.exec([`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`]);
+
+      const extractedBinary = path.join(extractDir, "kingfisher.exe");
+      const targetBinary = path.join(installDir, "kingfisher.exe");
+      
+      // Move binary
+      const { readFile } = await import("fs/promises");
+      await writeFile(targetBinary, await readFile(extractedBinary));
+      await unlink(extractedBinary);
+
+      // Cleanup
+      await unlink(zipPath);
+
+      this.binaryPath = targetBinary;
+      this.version = null;
+      const newVersion = await this.getVersion();
+      
+      return { success: true, output: `Successfully installed Kingfisher v${newVersion} for Windows.` };
+    } catch (error: any) {
+      return { success: false, output: `Windows installation failed: ${error.message}` };
     }
   }
 
@@ -279,22 +373,21 @@ export class KingfisherScanner {
     // Check if already cached
     if (this.binaryPath) return this.binaryPath;
 
-    // Try PATH
-    try {
-      const result = await this.exec(["which", "kingfisher"]);
-      if (result.exitCode === 0 && result.stdout.trim()) {
-        return result.stdout.trim();
-      }
-    } catch {}
+    const name = this.binaryName;
+    const paths = (process.env.PATH || "").split(path.delimiter);
+    
+    // Add local install dir to search paths
+    paths.unshift(this.installDir);
 
-    // Try ~/.local/bin
-    const localPath = KINGFISHER_LOCAL_PATH.replace("~", process.env.HOME || "");
-    try {
-      const result = await this.exec(["test", "-x", localPath]);
-      if (result.exitCode === 0) {
-        return localPath;
+    for (const p of paths) {
+      const fullPath = path.join(p, name);
+      try {
+        await access(fullPath, constants.X_OK);
+        return fullPath;
+      } catch {
+        continue;
       }
-    } catch {}
+    }
 
     return null;
   }
@@ -307,42 +400,27 @@ export class KingfisherScanner {
     }
 
     // Try to install
-    sdk.console.log("[Burfisher] Kingfisher binary not found, attempting installation...");
+    sdk.console.log("[Caidofisher] Kingfisher binary not found, attempting installation...");
     try {
-      await this.exec([
-        "curl",
-        "-sL",
-        "https://raw.githubusercontent.com/mongodb/kingfisher/main/scripts/install-kingfisher.sh",
-        "|",
-        "bash",
-      ]);
-
-      const installed = await this.findBinary();
-      if (installed) {
-        sdk.console.log(`[Burfisher] Kingfisher installed successfully at ${installed}`);
-        this.binaryPath = installed;
-        return installed;
+      const result = await this.installKingfisher(sdk);
+      if (result.success) {
+        return this.binaryPath;
       }
     } catch (error) {
-      sdk.console.error("[Burfisher] Kingfisher installation failed:", error);
+      sdk.console.error("[Caidofisher] Kingfisher installation failed:", error);
     }
 
     return null;
   }
 
   private async writeTempFile(sdk: SDK, id: string, data: string): Promise<string> {
-    const tempDir = process.env.TMPDIR || "/tmp";
-    const tempPath = `${tempDir}/burfisher-${id}-${Date.now()}.txt`;
-
-    const { writeFile } = await import("fs/promises");
+    const tempPath = path.join(this.tempDir, `caidofisher-${id}-${Date.now()}.txt`);
     await writeFile(tempPath, data, "utf-8");
-
     return tempPath;
   }
 
   private async deleteTempFile(path: string): Promise<void> {
     try {
-      const { unlink } = await import("fs/promises");
       await unlink(path);
     } catch {}
   }
@@ -351,16 +429,14 @@ export class KingfisherScanner {
     args: string[],
     timeout: number = 30_000
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const { spawn } = await import("child_process");
-
     return new Promise((resolve) => {
-      const [command, ...cmdArgs] = args;
-      const child = spawn(command, cmdArgs, {
+      const command = args.join(" ");
+      const child = spawn(command, {
+        shell: true,
         env: {
           ...process.env,
-          PATH: `${process.env.PATH}:${process.env.HOME}/.local/bin`,
-        },
-        shell: true,
+          PATH: `${process.env.PATH}${path.delimiter}${this.installDir}`,
+        }
       });
 
       let stdout = "";
