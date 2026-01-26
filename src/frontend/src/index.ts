@@ -128,14 +128,14 @@ export const init = (caido: KingfisherCaido) => {
 
   // Register context menu items
   caido.log.debug("[Kingfisher] Registering context menu items");
-  caido.menu.registerItem({ type: "RequestRow", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
-  caido.menu.registerItem({ type: "Request", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
-  caido.menu.registerItem({ type: "Response", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
+  caido.menu.registerItem({ type: "RequestRow", commandId: COMMAND_ID, leadingIcon: "fas fa-crow" });
+  caido.menu.registerItem({ type: "Request", commandId: COMMAND_ID, leadingIcon: "fas fa-crow" });
+  caido.menu.registerItem({ type: "Response", commandId: COMMAND_ID, leadingIcon: "fas fa-crow" });
 
   // Register sidebar item
   caido.log.debug("[Kingfisher] Registering sidebar item");
   caido.sidebar.registerItem("Kingfisher", SIDEBAR_PATH, {
-    icon: "fas fa-shield-halved",
+    icon: "fas fa-crow",
     group: "Plugins",
   });
 
@@ -169,7 +169,7 @@ function createDashboard(caido: KingfisherCaido) {
   header.className = "kf-header";
   header.innerHTML = `
     <div class="kf-header-left">
-      <i class="fas fa-shield-halved kf-logo"></i>
+      <i class="fas fa-crow kf-logo"></i>
       <div>
         <h1>Kingfisher</h1>
         <p class="kf-subtitle">Secrets scanner powered by MongoDB Kingfisher</p>
