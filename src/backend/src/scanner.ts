@@ -1,9 +1,3 @@
-import * as os from "os";
-import * as path from "path";
-import { writeFile, unlink, access, mkdir } from "fs/promises";
-import { constants } from "fs";
-import { spawn } from "child_process";
-
 import type { SDK } from "caido:plugin";
 import type {
   Finding,
@@ -13,6 +7,7 @@ import type {
 
 const BATCH_SIZE = 50;
 const SCAN_TIMEOUT_MS = 120_000;
+const INSTALL_TIMEOUT_MS = 300_000; // 5 minutes for download/install
 
 /**
  * Kingfisher binary integration for Caidofisher plugin.
@@ -22,32 +17,48 @@ export class KingfisherScanner {
   private binaryPath: string | null = null;
   private version: string | null = null;
 
-  private get isWindows() {
-    return os.platform() === "win32";
+  private async getIsWindows() {
+    try {
+      const os = await import("os");
+      return os.platform() === "win32";
+    } catch (e) {
+      return false;
+    }
   }
 
-  private get binaryName() {
-    return this.isWindows ? "kingfisher.exe" : "kingfisher";
+  private async getBinaryName() {
+    return (await this.getIsWindows()) ? "kingfisher.exe" : "kingfisher";
   }
 
-  private get installDir() {
-    return path.join(os.homedir(), ".local", "bin");
+  private async getInstallDir() {
+    try {
+      const os = await import("os");
+      const path = await import("path");
+      return path.join(os.homedir(), ".local", "bin");
+    } catch (e) {
+      return ".local/bin";
+    }
   }
 
-  private get tempDir() {
-    return os.tmpdir();
+  private async getTempDir() {
+    try {
+      const os = await import("os");
+      return os.tmpdir();
+    } catch (e) {
+      return "/tmp";
+    }
   }
 
   /**
    * Get Kingfisher version (and cache binary path)
    */
-  async getVersion(): Promise<string | null> {
+  async getVersion(): Promise<string | undefined> {
     if (this.version) return this.version;
 
     try {
       // Try to find kingfisher
       this.binaryPath = await this.findBinary();
-      if (!this.binaryPath) return null;
+      if (!this.binaryPath) return undefined;
 
       // Get version
       const result = await this.exec([this.binaryPath, "--version"]);
@@ -55,7 +66,7 @@ export class KingfisherScanner {
       this.version = match ? match[1] : "unknown";
       return this.version;
     } catch {
-      return null;
+      return undefined;
     }
   }
 
@@ -65,13 +76,13 @@ export class KingfisherScanner {
   async installKingfisher(sdk: SDK): Promise<{ success: boolean; output: string }> {
     sdk.console.log("[Caidofisher] Attempting to install/upgrade Kingfisher binary...");
     try {
-      if (this.isWindows) {
+      if (await this.getIsWindows()) {
         return await this.installWindows(sdk);
       }
 
       const result = await this.exec([
         "curl -sL https://raw.githubusercontent.com/mongodb/kingfisher/main/scripts/install-kingfisher.sh | bash",
-      ]);
+      ], INSTALL_TIMEOUT_MS);
 
       const output = result.stdout + (result.stderr ? "\nSTDERR:\n" + result.stderr : "");
       
@@ -93,35 +104,67 @@ export class KingfisherScanner {
   }
 
   private async installWindows(sdk: SDK): Promise<{ success: boolean; output: string }> {
-    const installDir = this.installDir;
-    const zipPath = path.join(this.tempDir, "kingfisher-windows.zip");
-    const extractDir = path.join(this.tempDir, `kingfisher-extract-${Date.now()}`);
+    const { writeFile, mkdir, readFile, readdir, stat } = await import("fs/promises");
+    const path = await import("path");
+    const installDir = await this.getInstallDir();
+    const tempDir = await this.getTempDir();
+    const zipPath = path.join(tempDir, `kingfisher-windows-${Date.now()}.zip`);
+    const extractDir = path.join(tempDir, `kingfisher-extract-${Date.now()}`);
+    const downloadUrl = "https://github.com/mongodb/kingfisher/releases/latest/download/kingfisher-windows-x64.zip";
     
     try {
       await mkdir(installDir, { recursive: true });
       await mkdir(extractDir, { recursive: true });
 
-      sdk.console.log("[Caidofisher] Downloading Kingfisher for Windows...");
-      const response = await fetch("https://github.com/mongodb/kingfisher/releases/latest/download/kingfisher-windows-x64.zip");
-      if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
+      sdk.console.log(`[Caidofisher] Downloading Kingfisher from ${downloadUrl}...`);
+      const downloadCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${downloadUrl}' -OutFile '${zipPath}' -UseBasicParsing"`;
       
-      const arrayBuffer = await response.arrayBuffer();
-      await writeFile(zipPath, Buffer.from(arrayBuffer));
+      const downloadResult = await this.exec([downloadCmd], INSTALL_TIMEOUT_MS);
+      if (downloadResult.exitCode !== 0) {
+        throw new Error(`Download failed (code ${downloadResult.exitCode}): ${downloadResult.stderr || downloadResult.stdout}`);
+      }
 
-      sdk.console.log("[Caidofisher] Extracting Kingfisher...");
-      await this.exec([`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`]);
+      sdk.console.log("[Caidofisher] Extracting Kingfisher archive...");
+      const extractCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force -ErrorAction Stop"`;
+      
+      const extractResult = await this.exec([extractCmd], INSTALL_TIMEOUT_MS);
+      if (extractResult.exitCode !== 0) {
+        throw new Error(`Extraction failed (code ${extractResult.exitCode}): ${extractResult.stderr || extractResult.stdout}`);
+      }
 
-      const extractedBinary = path.join(extractDir, "kingfisher.exe");
+      // Find the extracted binary (may be in a subdirectory)
+      const findBinaryInDir = async (dir: string): Promise<string | null> => {
+        const entries = await readdir(dir);
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry);
+          if (entry === "kingfisher.exe") return fullPath;
+          const s = await stat(fullPath);
+          if (s.isDirectory()) {
+            const found = await findBinaryInDir(fullPath);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const extractedBinary = await findBinaryInDir(extractDir);
+      if (!extractedBinary) {
+        throw new Error("Could not find kingfisher.exe in the extracted archive");
+      }
+
       const targetBinary = path.join(installDir, "kingfisher.exe");
       
-      // Move binary (use copy + unlink for cross-drive compatibility)
-      const { readFile } = await import("fs/promises");
+      sdk.console.log(`[Caidofisher] Moving binary to ${targetBinary}...`);
+      // Move binary
       await writeFile(targetBinary, await readFile(extractedBinary));
-      await unlink(extractedBinary);
-
-      // Cleanup
-      await unlink(zipPath);
-      // Note: extractDir still exists but is empty/near-empty, could rmdir if needed
+      
+      try {
+        const { unlink, rm } = await import("fs/promises");
+        await unlink(zipPath);
+        await rm(extractDir, { recursive: true, force: true });
+      } catch (e) {
+        sdk.console.warn(`[Caidofisher] Cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
 
       this.binaryPath = targetBinary;
       this.version = null;
@@ -129,7 +172,9 @@ export class KingfisherScanner {
       
       return { success: true, output: `Successfully installed Kingfisher v${newVersion} for Windows.` };
     } catch (error: any) {
-      return { success: false, output: `Windows installation failed: ${error.message}` };
+      const msg = error instanceof Error ? error.message : String(error);
+      sdk.console.error("[Caidofisher] Windows installation failed:", msg);
+      return { success: false, output: `Windows installation failed: ${msg}` };
     }
   }
 
@@ -153,17 +198,9 @@ export class KingfisherScanner {
     }
 
     // Process in batches
-    let runningTotal = 0;
     for (let i = 0; i < requestIds.length; i += BATCH_SIZE) {
       const batch = requestIds.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      sdk.console.log(`[Caidofisher] Processing batch ${batchNum} (${batch.length} requests)`);
       const batchResults = await this.scanBatch(sdk, binary, batch);
-      
-      const batchFindings = batchResults.reduce((sum, r) => sum + r.findings.length, 0);
-      runningTotal += batchFindings;
-      sdk.console.log(`[Caidofisher] Batch ${batchNum} complete: ${batchFindings} findings (Running total: ${runningTotal})`);
-      
       results.push(...batchResults);
     }
 
@@ -181,14 +218,11 @@ export class KingfisherScanner {
     const tempFiles: Map<string, string> = new Map(); // path -> requestId
     const results: ScanResult[] = [];
 
-    sdk.console.log(`[Caidofisher] Creating temp files for ${requestIds.length} requests...`);
-    const tempFileStart = Date.now();
     try {
       // Create temp files for each request
       for (const id of requestIds) {
         const record = await sdk.requests.get(id);
         if (!record) {
-          sdk.console.warn(`[Caidofisher] Request ${id} not found in database, skipping.`);
           results.push({
             requestId: id,
             findings: [],
@@ -201,33 +235,23 @@ export class KingfisherScanner {
         const request = record.request;
         const response = record.response;
 
-        const url = request.getUrl();
-        const method = request.getMethod();
-
         // Combine request and response data
         const rawRequest = request.getRaw().toText();
         const rawResponse = response ? response.getRaw().toText() : "";
         const data = `${rawRequest}\n\n${rawResponse}`;
-
-        sdk.console.log(`[Caidofisher] Request ${id}: ${method} ${url} (${data.length} bytes)`);
 
         // Write to temp file
         const tempPath = await this.writeTempFile(sdk, id, data);
         tempFiles.set(tempPath, id);
       }
 
-      const tempFileDuration = Date.now() - tempFileStart;
-      sdk.console.log(`[Caidofisher] Temp files created in ${tempFileDuration}ms`);
-
       if (tempFiles.size === 0) {
-        sdk.console.log("[Caidofisher] No temp files created, skipping Kingfisher execution.");
         return results;
       }
 
-      sdk.console.log(`[Caidofisher] Executing Kingfisher on ${tempFiles.size} temp files...`);
       // Run Kingfisher
       const args = [
-        binary,
+        `"${binary}"`,
         "scan",
         "--format",
         "json",
@@ -235,21 +259,19 @@ export class KingfisherScanner {
         "--no-ignore",
         "--jobs",
         "4",
-        ...Array.from(tempFiles.keys()),
+        ...Array.from(tempFiles.keys()).map(p => `"${p}"`),
       ];
 
-      sdk.console.log(`[Caidofisher] Executing: ${args.join(" ")}`);
-      const execStart = Date.now();
+      sdkInstance.console.log(`[Caidofisher] Executing Kingfisher: ${args.join(" ")}`);
       const execResult = await this.exec(args, SCAN_TIMEOUT_MS);
-      const execDuration = Date.now() - execStart;
-      sdk.console.log(`[Caidofisher] Kingfisher execution finished in ${execDuration}ms with code ${execResult.exitCode}`);
+      sdkInstance.console.log(`[Caidofisher] Kingfisher finished with code ${execResult.exitCode}`);
       
-      const rawOutput = execResult.stdout + (execResult.stderr ? "\nSTDERR:\n" + execResult.stderr : "");
-      sdk.console.log(`[Caidofisher] Parsing Kingfisher output (${execResult.stdout.length} bytes)...`);
-      const parseStart = Date.now();
+      if (execResult.stderr) {
+        sdkInstance.console.warn(`[Caidofisher] Kingfisher STDERR: ${execResult.stderr}`);
+      }
+
       const rawFindings = this.parseOutput(execResult.stdout);
-      const parseDuration = Date.now() - parseStart;
-      sdk.console.log(`[Caidofisher] Parsed ${rawFindings.length} raw finding(s) in ${parseDuration}ms.`);
+      sdkInstance.console.log(`[Caidofisher] Parsed ${rawFindings.length} findings from output`);
 
       // Map findings back to request IDs
       const findingsByPath = new Map<string, KingfisherRawFinding[]>();
@@ -262,8 +284,6 @@ export class KingfisherScanner {
 
       // Build results
       const duration = Date.now() - startTime;
-      sdk.console.log(`[Caidofisher] Mapping findings to ${tempFiles.size} requests...`);
-      const mappingStart = Date.now();
       for (const [tempPath, requestId] of tempFiles) {
         const rawFindingsForRequest = findingsByPath.get(tempPath) || [];
         const record = await sdk.requests.get(requestId);
@@ -278,14 +298,10 @@ export class KingfisherScanner {
           requestId,
           findings,
           duration,
-          rawOutput,
         });
       }
-      const mappingDuration = Date.now() - mappingStart;
-      sdk.console.log(`[Caidofisher] Findings mapped in ${mappingDuration}ms`);
 
       // Cleanup temp files
-      sdk.console.log(`[Caidofisher] Cleaning up ${tempFiles.size} temp files...`);
       for (const tempPath of tempFiles.keys()) {
         await this.deleteTempFile(tempPath);
       }
@@ -294,7 +310,6 @@ export class KingfisherScanner {
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
       const errorMsg = error instanceof Error ? error.message : String(error);
-      sdk.console.error(`[Caidofisher] Batch scan error: ${errorMsg}`);
 
       // Cleanup temp files on error
       for (const tempPath of tempFiles.keys()) {
@@ -319,7 +334,7 @@ export class KingfisherScanner {
     const confidence = this.normalizeConfidence(raw.finding.confidence);
 
     return {
-      id: crypto.randomUUID(),
+      id: Math.random().toString(36).substring(2) + Date.now().toString(36),
       requestId,
       url,
       method,
@@ -413,19 +428,23 @@ export class KingfisherScanner {
   }
 
   private async findBinary(): Promise<string | null> {
+    const fs = await import("fs");
+    const { access: accessPromise } = await import("fs/promises");
+    const path = await import("path");
+    
     // Check if already cached
     if (this.binaryPath) return this.binaryPath;
 
-    const name = this.binaryName;
-    const paths = (process.env.PATH || "").split(path.delimiter);
+    const name = await this.getBinaryName();
+    let paths: string[] = [];
     
     // Add local install dir to search paths
-    paths.unshift(this.installDir);
+    paths.unshift(await this.getInstallDir());
 
     for (const p of paths) {
       const fullPath = path.join(p, name);
       try {
-        await access(fullPath, constants.X_OK);
+        await accessPromise(fullPath, fs.constants.X_OK || 1);
         return fullPath;
       } catch {
         continue;
@@ -457,13 +476,16 @@ export class KingfisherScanner {
   }
 
   private async writeTempFile(sdk: SDK, id: string, data: string): Promise<string> {
-    const tempPath = path.join(this.tempDir, `caidofisher-${id}-${Date.now()}.txt`);
+    const { writeFile } = await import("fs/promises");
+    const path = await import("path");
+    const tempPath = path.join(await this.getTempDir(), `caidofisher-${id}-${Date.now()}.txt`);
     await writeFile(tempPath, data, "utf-8");
     return tempPath;
   }
 
   private async deleteTempFile(path: string): Promise<void> {
     try {
+      const { unlink } = await import("fs/promises");
       await unlink(path);
     } catch {}
   }
@@ -472,14 +494,14 @@ export class KingfisherScanner {
     args: string[],
     timeout: number = 30_000
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const { spawn } = await import("child_process");
+    const path = await import("path");
+    const installDir = await this.getInstallDir();
+
     return new Promise((resolve) => {
       const command = args.join(" ");
       const child = spawn(command, {
         shell: true,
-        env: {
-          ...process.env,
-          PATH: `${process.env.PATH}${path.delimiter}${this.installDir}`,
-        }
       });
 
       let stdout = "";

@@ -18,6 +18,25 @@ interface LogEntry {
 }
 
 const activityLogs: LogEntry[] = [];
+let logContentElement: HTMLElement | null = null;
+
+function addLog(level: "info" | "warn" | "error" | "debug", message: string) {
+  activityLogs.push({ timestamp: Date.now(), level, message });
+  if (activityLogs.length > 100) activityLogs.shift();
+  renderLogs();
+}
+
+function renderLogs() {
+  if (!logContentElement) return;
+  logContentElement.innerHTML = activityLogs.map(log => `
+    <div class="kf-log-entry kf-log-${log.level}">
+      <span class="kf-log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+      <span class="kf-log-level">${log.level.toUpperCase()}</span>
+      <span class="kf-log-message">${escapeHtml(log.message)}</span>
+    </div>
+  `).join("");
+  logContentElement.scrollTop = logContentElement.scrollHeight;
+}
 
 /**
  * Collect request IDs from various context types
@@ -202,7 +221,7 @@ function createDashboard(caido: KingfisherCaido) {
   `;
   container.appendChild(logPanel);
 
-  const logContent = logPanel.querySelector(".kf-log-content") as HTMLElement;
+  logContentElement = logPanel.querySelector(".kf-log-content") as HTMLElement;
   const logToggle = logPanel.querySelector(".kf-log-toggle") as HTMLElement;
   const logHeader = logPanel.querySelector(".kf-log-header") as HTMLElement;
   const logClearBtn = logPanel.querySelector(".kf-log-clear-btn") as HTMLElement;
@@ -212,7 +231,7 @@ function createDashboard(caido: KingfisherCaido) {
   logHeader.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).closest(".kf-log-header-actions")) return;
     isLogExpanded = !isLogExpanded;
-    logContent.style.display = isLogExpanded ? "block" : "none";
+    if (logContentElement) logContentElement.style.display = isLogExpanded ? "block" : "none";
     logToggle.style.transform = isLogExpanded ? "rotate(0deg)" : "rotate(-90deg)";
   });
 
@@ -233,24 +252,6 @@ function createDashboard(caido: KingfisherCaido) {
     addLog("info", "Activity log cleared.");
     renderLogs();
   });
-
-  function addLog(level: "info" | "warn" | "error" | "debug", message: string) {
-    activityLogs.push({ timestamp: Date.now(), level, message });
-    if (activityLogs.length > 100) activityLogs.shift();
-    renderLogs();
-  }
-
-  function renderLogs() {
-    if (!logContent) return;
-    logContent.innerHTML = activityLogs.map(log => `
-      <div class="kf-log-entry kf-log-${log.level}">
-        <span class="kf-log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
-        <span class="kf-log-level">${log.level.toUpperCase()}</span>
-        <span class="kf-log-message">${escapeHtml(log.message)}</span>
-      </div>
-    `).join("");
-    logContent.scrollTop = logContent.scrollHeight;
-  }
 
   // Details panel
   const detailsPanel = document.createElement("div");
@@ -275,12 +276,22 @@ function createDashboard(caido: KingfisherCaido) {
     addLog("debug", "Refreshing findings dashboard...");
     try {
       addLog("debug", "Fetching findings from backend...");
-      findingsCache = await caido.backend.getFindings();
-      addLog("debug", `Fetched ${findingsCache.length} findings.`);
+      try {
+        findingsCache = await caido.backend.getFindings();
+        addLog("debug", `Fetched ${findingsCache.length} findings.`);
+      } catch (err) {
+        caido.log.error("[Caidofisher] Failed to fetch findings:", err);
+        addLog("error", "Failed to fetch findings. Backend might be unavailable.");
+      }
       
       addLog("debug", "Fetching stats from backend...");
-      statsCache = await caido.backend.getStats();
-      addLog("debug", `Stats: Scanned=${statsCache.totalScanned}, Findings=${statsCache.totalFindings}`);
+      try {
+        statsCache = await caido.backend.getStats();
+        addLog("debug", `Stats: Scanned=${statsCache.totalScanned}, Findings=${statsCache.totalFindings}`);
+      } catch (err) {
+        caido.log.error("[Caidofisher] Failed to fetch stats:", err);
+        addLog("error", "Failed to fetch stats.");
+      }
       
       render();
       addLog("debug", "Dashboard render complete.");

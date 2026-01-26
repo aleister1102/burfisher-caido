@@ -1,7 +1,7 @@
 {
   "id": "caidofisher",
   "name": "Caidofisher",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "Scan HTTP traffic for exposed secrets using MongoDB Kingfisher",
   "author": {
     "name": "insomnia1102",

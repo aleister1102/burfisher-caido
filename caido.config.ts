@@ -4,7 +4,7 @@ export default defineConfig({
   id: "caidofisher",
   name: "Caidofisher",
   description: "Scan HTTP traffic for exposed secrets using MongoDB Kingfisher",
-  version: "1.0.4",
+  version: "1.0.6",
   author: {
     name: "insomnia1102",
     url: "https://github.com/aleister1102/caidofisher-caido",
