@@ -1,8 +1,8 @@
 import type { Caido, CommandContext } from "@caido/sdk-frontend";
 import type { KingfisherBackendAPI, Finding, PluginStats } from "../../shared/types";
 
-const COMMAND_ID = "caidofisher.scan";
-const SIDEBAR_PATH = "/caidofisher";
+const COMMAND_ID = "kingfisher.scan";
+const SIDEBAR_PATH = "/kingfisher";
 
 type KingfisherCaido = Caido<KingfisherBackendAPI>;
 
@@ -72,20 +72,20 @@ export const init = (caido: KingfisherCaido) => {
 
   // Register the scan command
   caido.commands.register(COMMAND_ID, {
-    name: "Scan with Caidofisher",
+    name: "Scan with Kingfisher",
     run: async (context: CommandContext) => {
       const requestIds = collectRequestIds(context);
-      caido.log.debug(`[Caidofisher] Scan command invoked, context type: ${context.type}`);
+      caido.log.debug(`[Kingfisher] Scan command invoked, context type: ${context.type}`);
       addLog("debug", `Scan command invoked, context type: ${context.type}`);
 
       if (requestIds.length === 0) {
-        caido.log.warn("[Caidofisher] No requests selected to scan.");
+        caido.log.warn("[Kingfisher] No requests selected to scan.");
         caido.window.showToast("No requests selected to scan.", { variant: "warning" });
         addLog("warn", "No requests selected to scan.");
         return;
       }
 
-      caido.log.info(`[Caidofisher] Scanning ${requestIds.length} request(s): ${requestIds.join(", ")}`);
+      caido.log.info(`[Kingfisher] Scanning ${requestIds.length} request(s): ${requestIds.join(", ")}`);
       caido.window.showToast(`Scanning ${requestIds.length} request(s)...`, { variant: "info" });
       addLog("info", `Initiating scan for ${requestIds.length} request(s)...`);
       isScanning = true;
@@ -97,7 +97,7 @@ export const init = (caido: KingfisherCaido) => {
         const duration = Date.now() - start;
         const totalFindings = results.reduce((sum, r) => sum + r.findings.length, 0);
 
-        caido.log.info(`[Caidofisher] Scan complete: ${totalFindings} finding(s) in ${results.length} request(s) (${duration}ms)`);
+        caido.log.info(`[Kingfisher] Scan complete: ${totalFindings} finding(s) in ${results.length} request(s) (${duration}ms)`);
         addLog("info", `Scan complete: Found ${totalFindings} finding(s) in ${results.length} request(s) (${duration}ms)`);
         
         // Show raw output from the first result (it's the same for all in a batch)
@@ -117,7 +117,7 @@ export const init = (caido: KingfisherCaido) => {
         addLog("debug", "Refreshing dashboard after scan...");
         dashboard.refresh();
       } catch (error) {
-        caido.log.error(`[Caidofisher] Scan failed for requests ${requestIds.join(", ")}:`, error);
+        caido.log.error(`[Kingfisher] Scan failed for requests ${requestIds.join(", ")}:`, error);
         caido.window.showToast("Scan failed. Check console for details.", { variant: "error" });
         addLog("error", `Scan failed: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
@@ -127,29 +127,29 @@ export const init = (caido: KingfisherCaido) => {
   });
 
   // Register context menu items
-  caido.log.debug("[Caidofisher] Registering context menu items");
+  caido.log.debug("[Kingfisher] Registering context menu items");
   caido.menu.registerItem({ type: "RequestRow", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
   caido.menu.registerItem({ type: "Request", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
   caido.menu.registerItem({ type: "Response", commandId: COMMAND_ID, leadingIcon: "fas fa-shield-halved" });
 
   // Register sidebar item
-  caido.log.debug("[Caidofisher] Registering sidebar item");
-  caido.sidebar.registerItem("Caidofisher", SIDEBAR_PATH, {
+  caido.log.debug("[Kingfisher] Registering sidebar item");
+  caido.sidebar.registerItem("Kingfisher", SIDEBAR_PATH, {
     icon: "fas fa-shield-halved",
     group: "Plugins",
   });
 
-  // Register command to open Caidofisher UI
-  const OPEN_UI_COMMAND = "caidofisher.openUI";
+  // Register command to open Kingfisher UI
+  const OPEN_UI_COMMAND = "kingfisher.openUI";
   caido.commands.register(OPEN_UI_COMMAND, {
-    name: "Caidofisher: Open Dashboard",
+    name: "Kingfisher: Open Dashboard",
     run: () => {
       caido.navigation.goTo(SIDEBAR_PATH);
     },
   });
   caido.commandPalette.register(OPEN_UI_COMMAND);
 
-  caido.log.info("Caidofisher frontend loaded.");
+  caido.log.info("Kingfisher frontend loaded.");
 };
 
 /**
@@ -157,7 +157,7 @@ export const init = (caido: KingfisherCaido) => {
  */
 function createDashboard(caido: KingfisherCaido) {
   const container = document.createElement("div");
-  container.className = "caidofisher-dashboard";
+  container.className = "kingfisher-dashboard";
 
   // Inject styles
   const style = document.createElement("style");
@@ -171,7 +171,7 @@ function createDashboard(caido: KingfisherCaido) {
     <div class="kf-header-left">
       <i class="fas fa-shield-halved kf-logo"></i>
       <div>
-        <h1>Caidofisher</h1>
+        <h1>Kingfisher</h1>
         <p class="kf-subtitle">Secrets scanner powered by MongoDB Kingfisher</p>
       </div>
     </div>
@@ -203,7 +203,23 @@ function createDashboard(caido: KingfisherCaido) {
   tableContainer.className = "kf-table-container";
   container.appendChild(tableContainer);
 
-  // Log panel
+  // Empty state (shown when no findings)
+  const emptyState = document.createElement("div");
+  emptyState.className = "kf-empty-state";
+  emptyState.innerHTML = `
+    <i class="fas fa-search"></i>
+    <h3>No findings yet</h3>
+    <p>Right-click on requests in History and select "Scan with Kingfisher" to start.</p>
+  `;
+  container.appendChild(emptyState);
+
+  // Details panel (shown when a finding is selected)
+  const detailsPanel = document.createElement("div");
+  detailsPanel.className = "kf-details-panel";
+  detailsPanel.style.display = "none";
+  container.appendChild(detailsPanel);
+
+  // Log panel (sticks to bottom)
   const logPanel = document.createElement("div");
   logPanel.className = "kf-log-panel";
   logPanel.innerHTML = `
@@ -227,7 +243,11 @@ function createDashboard(caido: KingfisherCaido) {
   const logClearBtn = logPanel.querySelector(".kf-log-clear-btn") as HTMLElement;
   const logCopyBtn = logPanel.querySelector(".kf-log-copy-btn") as HTMLElement;
 
-  let isLogExpanded = true;
+  // Start collapsed by default
+  let isLogExpanded = false;
+  if (logContentElement) logContentElement.style.display = "none";
+  logToggle.style.transform = "rotate(-90deg)";
+
   logHeader.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).closest(".kf-log-header-actions")) return;
     isLogExpanded = !isLogExpanded;
@@ -253,26 +273,12 @@ function createDashboard(caido: KingfisherCaido) {
     renderLogs();
   });
 
-  // Details panel
-  const detailsPanel = document.createElement("div");
-  detailsPanel.className = "kf-details-panel";
-  detailsPanel.style.display = "none";
-  container.appendChild(detailsPanel);
-
-  // Empty state
-  const emptyState = document.createElement("div");
-  emptyState.className = "kf-empty-state";
-  emptyState.innerHTML = `
-    <i class="fas fa-search"></i>
-    <h3>No findings yet</h3>
-    <p>Right-click on requests in History and select "Scan with Caidofisher" to start.</p>
-  `;
-  container.appendChild(emptyState);
-
   let selectedFinding: Finding | null = null;
 
+  let binaryCheckDone = false;
+
   async function refresh() {
-    caido.log.debug("[Caidofisher] Refreshing findings dashboard");
+    caido.log.debug("[Kingfisher] Refreshing findings dashboard");
     addLog("debug", "Refreshing findings dashboard...");
     try {
       addLog("debug", "Fetching findings from backend...");
@@ -280,7 +286,7 @@ function createDashboard(caido: KingfisherCaido) {
         findingsCache = await caido.backend.getFindings();
         addLog("debug", `Fetched ${findingsCache.length} findings.`);
       } catch (err) {
-        caido.log.error("[Caidofisher] Failed to fetch findings:", err);
+        caido.log.error("[Kingfisher] Failed to fetch findings:", err);
         addLog("error", "Failed to fetch findings. Backend might be unavailable.");
       }
       
@@ -288,15 +294,26 @@ function createDashboard(caido: KingfisherCaido) {
       try {
         statsCache = await caido.backend.getStats();
         addLog("debug", `Stats: Scanned=${statsCache.totalScanned}, Findings=${statsCache.totalFindings}`);
+        
+        // Check for Kingfisher binary on first load
+        if (!binaryCheckDone) {
+          binaryCheckDone = true;
+          if (statsCache.kingfisherVersion) {
+            addLog("info", `Kingfisher v${statsCache.kingfisherVersion} detected.`);
+          } else {
+            addLog("warn", "Kingfisher binary not found. Click 'Install/Upgrade Kingfisher' to install.");
+            caido.window.showToast("Kingfisher binary not found. Please install it.", { variant: "warning" });
+          }
+        }
       } catch (err) {
-        caido.log.error("[Caidofisher] Failed to fetch stats:", err);
+        caido.log.error("[Kingfisher] Failed to fetch stats:", err);
         addLog("error", "Failed to fetch stats.");
       }
       
       render();
       addLog("debug", "Dashboard render complete.");
     } catch (error) {
-      caido.log.error("[Caidofisher] Failed to refresh findings:", error);
+      caido.log.error("[Kingfisher] Failed to refresh findings:", error);
       addLog("error", `Failed to refresh dashboard: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -413,7 +430,6 @@ function createDashboard(caido: KingfisherCaido) {
       </div>
       <div class="kf-details-actions">
         <button class="kf-btn kf-btn-copy">Copy Full Value</button>
-        <button class="kf-btn kf-btn-goto">Go to Request</button>
       </div>
     `;
 
@@ -429,17 +445,12 @@ function createDashboard(caido: KingfisherCaido) {
       navigator.clipboard.writeText(finding.finding.rawSnippet);
       caido.window.showToast("Copied to clipboard", { variant: "success" });
     });
-
-    // Go to request button
-    detailsPanel.querySelector(".kf-btn-goto")?.addEventListener("click", () => {
-      caido.navigation.goTo(`/http-history/${finding.requestId}`);
-    });
   }
 
   // Event handlers
   clearBtn.addEventListener("click", async () => {
     if (!confirm("Clear all findings?")) return;
-    caido.log.info("[Caidofisher] Clearing all findings");
+    caido.log.info("[Kingfisher] Clearing all findings");
     addLog("info", "Clearing all findings");
     await caido.backend.clearFindings();
     await refresh();
@@ -447,14 +458,14 @@ function createDashboard(caido: KingfisherCaido) {
   });
 
   exportBtn.addEventListener("click", async () => {
-    caido.log.info("[Caidofisher] Exporting findings to JSON");
+    caido.log.info("[Kingfisher] Exporting findings to JSON");
     addLog("info", "Exporting findings to JSON");
     const json = await caido.backend.exportFindings();
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `caidofisher-findings-${Date.now()}.json`;
+    a.download = `kingfisher-findings-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     caido.window.showToast("Exported findings", { variant: "success" });
@@ -476,7 +487,7 @@ function createDashboard(caido: KingfisherCaido) {
       }
       await refresh();
     } catch (error) {
-      caido.log.error("[Caidofisher] Install failed:", error);
+      caido.log.error("[Kingfisher] Install failed:", error);
       addLog("error", `Installation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
@@ -513,17 +524,21 @@ function formatRelativeTime(timestamp: number): string {
 
 function getDashboardStyles(): string {
   return `
-    .caidofisher-dashboard {
+    .kingfisher-dashboard {
       padding: 24px;
       width: 100%;
-      min-height: 100%;
+      height: 100%;
       box-sizing: border-box;
       font-family: var(--font-family, system-ui, sans-serif);
       color: var(--color-text, #e0e0e0);
       background: var(--color-bg, #1a1a1a);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     .kf-header {
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -554,6 +569,7 @@ function getDashboardStyles(): string {
     }
 
     .kf-stats-bar {
+      flex-shrink: 0;
       display: flex;
       gap: 32px;
       margin-bottom: 16px;
@@ -580,13 +596,16 @@ function getDashboardStyles(): string {
     }
 
     .kf-actions-bar {
+      flex-shrink: 0;
       display: flex;
       gap: 8px;
       margin-bottom: 16px;
     }
 
     .kf-table-container {
-      overflow-x: auto;
+      flex: 1;
+      overflow: auto;
+      min-height: 0;
       margin-bottom: 16px;
     }
 
@@ -661,6 +680,7 @@ function getDashboardStyles(): string {
     }
 
     .kf-empty-state {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -685,11 +705,14 @@ function getDashboardStyles(): string {
     }
 
     .kf-details-panel {
+      flex-shrink: 0;
       margin-top: 16px;
       padding: 16px;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 8px;
+      max-height: 350px;
+      overflow-y: auto;
     }
 
     .kf-details-header {
@@ -724,7 +747,8 @@ function getDashboardStyles(): string {
 
     .kf-detail-row {
       display: flex;
-      gap: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .kf-detail-row label {
@@ -733,12 +757,23 @@ function getDashboardStyles(): string {
       opacity: 0.6;
     }
 
+    .kf-detail-row .kf-secret {
+      flex: 1 1 100%;
+      margin-top: 4px;
+    }
+
     .kf-secret {
-      padding: 8px 12px;
+      display: block;
+      padding: 12px;
       background: rgba(0, 0, 0, 0.3);
       border-radius: 4px;
       font-family: monospace;
+      font-size: 12px;
       word-break: break-all;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 1.5;
     }
 
     .kf-details-actions {
@@ -774,7 +809,8 @@ function getDashboardStyles(): string {
     }
 
     .kf-log-panel {
-      margin-top: 24px;
+      flex-shrink: 0;
+      margin-top: auto;
       background: rgba(255, 255, 255, 0.02);
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 8px;

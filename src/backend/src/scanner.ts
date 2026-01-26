@@ -5,17 +5,34 @@ import type {
   KingfisherRawFinding,
 } from "../../shared/types";
 
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 100; // Kingfisher handles large batches efficiently
+const MAX_PARALLEL_BATCHES = 3; // Process up to 3 batches concurrently
 const SCAN_TIMEOUT_MS = 120_000;
 const INSTALL_TIMEOUT_MS = 300_000; // 5 minutes for download/install
 
 /**
- * Kingfisher binary integration for Caidofisher plugin.
+ * Kingfisher binary integration for Kingfisher plugin.
  * Handles detection, installation, and execution.
  */
 export class KingfisherScanner {
   private binaryPath: string | null = null;
   private version: string | null = null;
+  private outputFormatSupported: boolean | null = null;
+
+  private async detectCapabilities(sdk: SDK, binary: string) {
+    if (this.outputFormatSupported === true) return;
+
+    try {
+      const result = await this.exec([`"${binary}"`, "scan", "--help"]);
+      const helpOutput = result.stdout + result.stderr;
+      // Check for --format or -f flag (not --output-format)
+      this.outputFormatSupported = helpOutput.includes("--format") || helpOutput.includes("-f,");
+      sdk.console.log(`[Kingfisher] Detected CLI capabilities: formatSupported=${this.outputFormatSupported}`);
+    } catch (e) {
+      this.outputFormatSupported = false;
+      sdk.console.warn(`[Kingfisher] Failed to detect CLI capabilities: ${e}`);
+    }
+  }
 
   private async getIsWindows() {
     try {
@@ -60,8 +77,8 @@ export class KingfisherScanner {
       this.binaryPath = await this.findBinary();
       if (!this.binaryPath) return undefined;
 
-      // Get version
-      const result = await this.exec([this.binaryPath, "--version"]);
+      // Get version (quote path for Windows compatibility)
+      const result = await this.exec([`"${this.binaryPath}"`, "--version"]);
       const match = result.stdout.match(/kingfisher[^\d]*(\d+\.\d+\.\d+)/i);
       this.version = match ? match[1] : "unknown";
       return this.version;
@@ -74,7 +91,7 @@ export class KingfisherScanner {
    * Install or upgrade Kingfisher binary
    */
   async installKingfisher(sdk: SDK): Promise<{ success: boolean; output: string }> {
-    sdk.console.log("[Caidofisher] Attempting to install/upgrade Kingfisher binary...");
+    sdk.console.log("[Kingfisher] Attempting to install/upgrade Kingfisher binary...");
     try {
       if (await this.getIsWindows()) {
         return await this.installWindows(sdk);
@@ -90,15 +107,16 @@ export class KingfisherScanner {
       if (installed) {
         this.binaryPath = installed;
         this.version = null; // Reset version to force re-detection
+        this.outputFormatSupported = null; // Reset capabilities to force re-detection
         const newVersion = await this.getVersion();
-        sdk.console.log(`[Caidofisher] Kingfisher installed successfully at ${installed} (v${newVersion})`);
+        sdk.console.log(`[Kingfisher] Kingfisher installed successfully at ${installed} (v${newVersion})`);
         return { success: true, output: `Successfully installed Kingfisher v${newVersion}\n\n${output}` };
       }
 
       return { success: false, output: `Installation failed: binary not found after script execution\n\n${output}` };
     } catch (error: any) {
       const msg = error instanceof Error ? error.message : String(error);
-      sdk.console.error("[Caidofisher] Kingfisher installation failed:", msg);
+      sdk.console.error("[Kingfisher] Kingfisher installation failed:", msg);
       return { success: false, output: `Installation failed: ${msg}` };
     }
   }
@@ -116,7 +134,7 @@ export class KingfisherScanner {
       await mkdir(installDir, { recursive: true });
       await mkdir(extractDir, { recursive: true });
 
-      sdk.console.log(`[Caidofisher] Downloading Kingfisher from ${downloadUrl}...`);
+      sdk.console.log(`[Kingfisher] Downloading Kingfisher from ${downloadUrl}...`);
       const downloadCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${downloadUrl}' -OutFile '${zipPath}' -UseBasicParsing"`;
       
       const downloadResult = await this.exec([downloadCmd], INSTALL_TIMEOUT_MS);
@@ -124,7 +142,7 @@ export class KingfisherScanner {
         throw new Error(`Download failed (code ${downloadResult.exitCode}): ${downloadResult.stderr || downloadResult.stdout}`);
       }
 
-      sdk.console.log("[Caidofisher] Extracting Kingfisher archive...");
+      sdk.console.log("[Kingfisher] Extracting Kingfisher archive...");
       const extractCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force -ErrorAction Stop"`;
       
       const extractResult = await this.exec([extractCmd], INSTALL_TIMEOUT_MS);
@@ -154,7 +172,7 @@ export class KingfisherScanner {
 
       const targetBinary = path.join(installDir, "kingfisher.exe");
       
-      sdk.console.log(`[Caidofisher] Moving binary to ${targetBinary}...`);
+      sdk.console.log(`[Kingfisher] Moving binary to ${targetBinary}...`);
       // Move binary
       await writeFile(targetBinary, await readFile(extractedBinary));
       
@@ -163,7 +181,7 @@ export class KingfisherScanner {
         await unlink(zipPath);
         await rm(extractDir, { recursive: true, force: true });
       } catch (e) {
-        sdk.console.warn(`[Caidofisher] Cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+        sdk.console.warn(`[Kingfisher] Cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
       }
 
       this.binaryPath = targetBinary;
@@ -173,7 +191,7 @@ export class KingfisherScanner {
       return { success: true, output: `Successfully installed Kingfisher v${newVersion} for Windows.` };
     } catch (error: any) {
       const msg = error instanceof Error ? error.message : String(error);
-      sdk.console.error("[Caidofisher] Windows installation failed:", msg);
+      sdk.console.error("[Kingfisher] Windows installation failed:", msg);
       return { success: false, output: `Windows installation failed: ${msg}` };
     }
   }
@@ -182,13 +200,13 @@ export class KingfisherScanner {
    * Scan multiple requests for secrets
    */
   async scan(sdk: SDK, requestIds: string[]): Promise<ScanResult[]> {
-    sdk.console.log(`[Caidofisher] Starting scan of ${requestIds.length} request(s)`);
+    sdk.console.log(`[Kingfisher] Starting scan of ${requestIds.length} request(s)`);
     const results: ScanResult[] = [];
 
     // Ensure binary is available
     const binary = await this.ensureBinary(sdk);
     if (!binary) {
-      sdk.console.error("[Caidofisher] Scanning aborted: binary unavailable");
+      sdk.console.error("[Kingfisher] Scanning aborted: binary unavailable");
       return requestIds.map((id) => ({
         requestId: id,
         findings: [],
@@ -197,15 +215,24 @@ export class KingfisherScanner {
       }));
     }
 
-    // Process in batches
+    // Split into batches
+    const batches: string[][] = [];
     for (let i = 0; i < requestIds.length; i += BATCH_SIZE) {
-      const batch = requestIds.slice(i, i + BATCH_SIZE);
-      const batchResults = await this.scanBatch(sdk, binary, batch);
-      results.push(...batchResults);
+      batches.push(requestIds.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process batches in parallel (limited concurrency)
+    for (let i = 0; i < batches.length; i += MAX_PARALLEL_BATCHES) {
+      const parallelBatches = batches.slice(i, i + MAX_PARALLEL_BATCHES);
+      const batchPromises = parallelBatches.map(batch => this.scanBatch(sdk, binary, batch));
+      const batchResultsArray = await Promise.all(batchPromises);
+      for (const batchResults of batchResultsArray) {
+        results.push(...batchResults);
+      }
     }
 
     const totalFindings = results.reduce((sum, r) => sum + r.findings.length, 0);
-    sdk.console.log(`[Caidofisher] Scan completed. Found ${totalFindings} finding(s) total.`);
+    sdk.console.log(`[Kingfisher] Scan completed. Found ${totalFindings} finding(s) total.`);
     return results;
   }
 
@@ -217,19 +244,17 @@ export class KingfisherScanner {
     const startTime = Date.now();
     const tempFiles: Map<string, string> = new Map(); // path -> requestId
     const results: ScanResult[] = [];
+    let outputFilePath: string | null = null;
 
     try {
-      // Create temp files for each request
-      for (const id of requestIds) {
+      // Ensure capabilities are detected
+      await this.detectCapabilities(sdk, binary);
+
+      // Create temp files for each request in parallel
+      const tempFilePromises = requestIds.map(async (id) => {
         const record = await sdk.requests.get(id);
         if (!record) {
-          results.push({
-            requestId: id,
-            findings: [],
-            error: "Request not found",
-            duration: 0,
-          });
-          continue;
+          return { id, tempPath: null, error: "Request not found" };
         }
 
         const request = record.request;
@@ -242,7 +267,22 @@ export class KingfisherScanner {
 
         // Write to temp file
         const tempPath = await this.writeTempFile(sdk, id, data);
-        tempFiles.set(tempPath, id);
+        return { id, tempPath, error: null };
+      });
+
+      const tempFileResults = await Promise.all(tempFilePromises);
+      
+      for (const result of tempFileResults) {
+        if (result.error || !result.tempPath) {
+          results.push({
+            requestId: result.id,
+            findings: [],
+            error: result.error || "Failed to create temp file",
+            duration: 0,
+          });
+        } else {
+          tempFiles.set(result.tempPath, result.id);
+        }
       }
 
       if (tempFiles.size === 0) {
@@ -250,28 +290,57 @@ export class KingfisherScanner {
       }
 
       // Run Kingfisher
-      const args = [
-        `"${binary}"`,
-        "scan",
-        "--format",
-        "json",
-        "--no-update-check",
-        "--no-ignore",
-        "--jobs",
-        "4",
-        ...Array.from(tempFiles.keys()).map(p => `"${p}"`),
-      ];
-
-      sdkInstance.console.log(`[Caidofisher] Executing Kingfisher: ${args.join(" ")}`);
-      const execResult = await this.exec(args, SCAN_TIMEOUT_MS);
-      sdkInstance.console.log(`[Caidofisher] Kingfisher finished with code ${execResult.exitCode}`);
+      const args = [`"${binary}"`, "scan"];
       
-      if (execResult.stderr) {
-        sdkInstance.console.warn(`[Caidofisher] Kingfisher STDERR: ${execResult.stderr}`);
+      const path = await import("path");
+      outputFilePath = path.join(await this.getTempDir(), `kingfisher-output-${Date.now()}.txt`);
+      args.push("--output", `"${outputFilePath}"`);
+
+      if (this.outputFormatSupported) {
+        args.push("--format", "json");
+      }
+      
+      args.push(...Array.from(tempFiles.keys()).map(p => `"${p}"`));
+
+      sdk.console.log(`[Kingfisher] Executing Kingfisher: ${args.join(" ")}`);
+      const execResult = await this.exec(args, SCAN_TIMEOUT_MS);
+      sdk.console.log(`[Kingfisher] Kingfisher finished with code ${execResult.exitCode}`);
+      
+      let finalStdout = execResult.stdout;
+      if (outputFilePath) {
+        const { readFile } = await import("fs/promises");
+        try {
+          finalStdout = await readFile(outputFilePath, "utf-8");
+        } catch (e) {
+          sdk.console.error(`[Kingfisher] Failed to read output file ${outputFilePath}: ${e}`);
+        }
       }
 
-      const rawFindings = this.parseOutput(execResult.stdout);
-      sdkInstance.console.log(`[Caidofisher] Parsed ${rawFindings.length} findings from output`);
+      if (execResult.stdout && this.outputFormatSupported) {
+        sdk.console.log(`[Kingfisher] Kingfisher STDOUT (first 1000 chars): ${execResult.stdout.substring(0, 1000)}`);
+      }
+
+      if (execResult.stderr) {
+        sdk.console.warn(`[Kingfisher] Kingfisher STDERR: ${execResult.stderr}`);
+      }
+
+      let rawFindings = this.parseOutput(finalStdout);
+      sdk.console.log(`[Kingfisher] Parsed ${rawFindings.length} findings from JSON output`);
+
+      // If no findings parsed from JSON, try parsing pretty output as fallback
+      // Detect pretty format by looking for emoji markers or the Findings line
+      const hasPrettyFormat = /[🔓🔒]/.test(finalStdout) || /\|Finding\.+:/.test(finalStdout);
+      if (rawFindings.length === 0 && hasPrettyFormat) {
+        sdk.console.log(`[Kingfisher] Detected pretty format output, using fallback parser`);
+        const fallbackFindings = this.parsePrettyOutput(finalStdout);
+        sdk.console.log(`[Kingfisher] Fallback parser found ${fallbackFindings.length} findings`);
+        if (fallbackFindings.length > 0) {
+          rawFindings = fallbackFindings;
+        }
+      }
+
+      // Combined output for debugging
+      const combinedOutput = `STDOUT:\n${execResult.stdout}\n\nSTDERR:\n${execResult.stderr}${outputFilePath ? `\n\nOUTPUT FILE CONTENT:\n${finalStdout}` : ""}`;
 
       // Map findings back to request IDs
       const findingsByPath = new Map<string, KingfisherRawFinding[]>();
@@ -282,9 +351,9 @@ export class KingfisherScanner {
         findingsByPath.set(path, existing);
       }
 
-      // Build results
+      // Build results in parallel
       const duration = Date.now() - startTime;
-      for (const [tempPath, requestId] of tempFiles) {
+      const resultPromises = Array.from(tempFiles.entries()).map(async ([tempPath, requestId]) => {
         const rawFindingsForRequest = findingsByPath.get(tempPath) || [];
         const record = await sdk.requests.get(requestId);
         const url = record?.request?.getUrl() || "unknown";
@@ -294,27 +363,35 @@ export class KingfisherScanner {
           this.transformFinding(raw, requestId, url, method)
         );
 
-        results.push({
+        return {
           requestId,
           findings,
           duration,
-        });
-      }
+          rawOutput: combinedOutput,
+        };
+      });
 
-      // Cleanup temp files
-      for (const tempPath of tempFiles.keys()) {
-        await this.deleteTempFile(tempPath);
+      const builtResults = await Promise.all(resultPromises);
+      results.push(...builtResults);
+
+      // Cleanup temp files in parallel
+      const cleanupPromises = Array.from(tempFiles.keys()).map(p => this.deleteTempFile(p));
+      if (outputFilePath) {
+        cleanupPromises.push(this.deleteTempFile(outputFilePath));
       }
+      await Promise.all(cleanupPromises);
 
       return results;
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
       const errorMsg = error instanceof Error ? error.message : String(error);
 
-      // Cleanup temp files on error
-      for (const tempPath of tempFiles.keys()) {
-        await this.deleteTempFile(tempPath);
+      // Cleanup temp files on error (parallel)
+      const errorCleanupPromises = Array.from(tempFiles.keys()).map(p => this.deleteTempFile(p));
+      if (outputFilePath) {
+        errorCleanupPromises.push(this.deleteTempFile(outputFilePath));
       }
+      await Promise.all(errorCleanupPromises).catch(() => {});
 
       return requestIds.map((id) => ({
         requestId: id,
@@ -427,25 +504,134 @@ export class KingfisherScanner {
     return findings;
   }
 
+  private parsePrettyOutput(text: string): KingfisherRawFinding[] {
+    const findings: KingfisherRawFinding[] = [];
+    const lines = text.split(/\r?\n/);
+    
+    let currentFinding: any = null;
+
+    for (const line of lines) {
+      // Match start of a new finding (e.g., "🔓 JSON WEB TOKEN (BASE64URL-ENCODED) => [KINGFISHER.JWT.1]")
+      // Allow optional whitespace before the emoji
+      const ruleMatch = line.match(/^\s*[🔓🔒]\s+(.+?)\s+=>\s+\[(.+?)\]/);
+      if (ruleMatch) {
+        // Push previous finding if valid
+        if (currentFinding && currentFinding.finding.snippet && currentFinding.finding.path) {
+          findings.push(currentFinding);
+        }
+        currentFinding = {
+          rule: {
+            id: ruleMatch[2].trim(),
+            name: ruleMatch[1].trim(),
+          },
+          finding: {
+            snippet: "",
+            path: "",
+            confidence: "medium",
+          }
+        };
+        continue;
+      }
+
+      // Also try matching without emoji (e.g., if emoji got stripped)
+      // Pattern: "RULE_NAME => [RULE.ID]"
+      const ruleMatchNoEmoji = line.match(/^\s*([A-Z][A-Z0-9 _().-]+)\s+=>\s+\[([A-Z0-9_.]+)\]/i);
+      if (ruleMatchNoEmoji && !currentFinding) {
+        currentFinding = {
+          rule: {
+            id: ruleMatchNoEmoji[2].trim(),
+            name: ruleMatchNoEmoji[1].trim(),
+          },
+          finding: {
+            snippet: "",
+            path: "",
+            confidence: "medium",
+          }
+        };
+        continue;
+      }
+
+      if (!currentFinding) continue;
+
+      // Match property lines (e.g., " |Finding.......: eyJhbGci...")
+      // Pattern: optional space, pipe, key with dots, colon, value
+      const propertyMatch = line.match(/^\s*\|([A-Za-z_]+)\.+:\s*(.*)$/);
+      if (propertyMatch) {
+        const key = propertyMatch[1].trim().toLowerCase();
+        const value = propertyMatch[2].trim();
+
+        if (key === "finding") {
+          currentFinding.finding.snippet = value;
+        } else if (key === "path") {
+          currentFinding.finding.path = value;
+        } else if (key === "confidence") {
+          currentFinding.finding.confidence = value.toLowerCase();
+        } else if (key === "fingerprint") {
+          currentFinding.finding.fingerprint = value;
+        } else if (key === "validation") {
+          currentFinding.finding.validation = {
+            status: value.toLowerCase().includes("active") || value.toLowerCase().includes("valid") ? "valid" : "invalid",
+            response: ""
+          };
+        }
+        continue;
+      }
+
+      // Match nested property lines (e.g., " |__Response....: ...")
+      const nestedMatch = line.match(/^\s*\|__([A-Za-z_]+)\.+:\s*(.*)$/);
+      if (nestedMatch && currentFinding) {
+        const key = nestedMatch[1].trim().toLowerCase();
+        const value = nestedMatch[2].trim();
+        if (key === "response" && currentFinding.finding.validation) {
+          currentFinding.finding.validation.response = value;
+        }
+      }
+    }
+
+    // Push the last finding if valid
+    if (currentFinding && currentFinding.finding.snippet && currentFinding.finding.path) {
+      findings.push(currentFinding);
+    }
+
+    return findings;
+  }
+
   private async findBinary(): Promise<string | null> {
     const fs = await import("fs");
-    const { access: accessPromise } = await import("fs/promises");
+    const { access: accessPromise, stat } = await import("fs/promises");
     const path = await import("path");
     
-    // Check if already cached
-    if (this.binaryPath) return this.binaryPath;
+    // Check if already cached and still exists
+    if (this.binaryPath) {
+      try {
+        await accessPromise(this.binaryPath);
+        return this.binaryPath;
+      } catch {
+        this.binaryPath = null; // Reset cache if file no longer exists
+      }
+    }
 
     const name = await this.getBinaryName();
-    let paths: string[] = [];
+    const isWindows = await this.getIsWindows();
+    const searchPaths: string[] = [];
     
     // Add local install dir to search paths
-    paths.unshift(await this.getInstallDir());
+    searchPaths.push(await this.getInstallDir());
 
-    for (const p of paths) {
+    for (const p of searchPaths) {
       const fullPath = path.join(p, name);
       try {
-        await accessPromise(fullPath, fs.constants.X_OK || 1);
-        return fullPath;
+        // On Windows, just check if file exists and is a file
+        // On Unix, check for execute permission
+        if (isWindows) {
+          const stats = await stat(fullPath);
+          if (stats.isFile()) {
+            return fullPath;
+          }
+        } else {
+          await accessPromise(fullPath, fs.constants.X_OK);
+          return fullPath;
+        }
       } catch {
         continue;
       }
@@ -462,14 +648,14 @@ export class KingfisherScanner {
     }
 
     // Try to install
-    sdk.console.log("[Caidofisher] Kingfisher binary not found, attempting installation...");
+    sdk.console.log("[Kingfisher] Kingfisher binary not found, attempting installation...");
     try {
       const result = await this.installKingfisher(sdk);
       if (result.success) {
         return this.binaryPath;
       }
     } catch (error) {
-      sdk.console.error("[Caidofisher] Kingfisher installation failed:", error);
+      sdk.console.error("[Kingfisher] Kingfisher installation failed:", error);
     }
 
     return null;
@@ -478,7 +664,7 @@ export class KingfisherScanner {
   private async writeTempFile(sdk: SDK, id: string, data: string): Promise<string> {
     const { writeFile } = await import("fs/promises");
     const path = await import("path");
-    const tempPath = path.join(await this.getTempDir(), `caidofisher-${id}-${Date.now()}.txt`);
+    const tempPath = path.join(await this.getTempDir(), `kingfisher-${id}-${Date.now()}.txt`);
     await writeFile(tempPath, data, "utf-8");
     return tempPath;
   }

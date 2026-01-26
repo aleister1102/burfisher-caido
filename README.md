@@ -1,4 +1,4 @@
-# Caidofisher
+# Kingfisher
 
 A Caido plugin that integrates the [MongoDB Kingfisher](https://github.com/mongodb/kingfisher) secrets scanner. Port of [Burfisher](https://github.com/aleister1102/burfisher) from Burp Suite to Caido.
 
@@ -19,14 +19,13 @@ A Caido plugin that integrates the [MongoDB Kingfisher](https://github.com/mongo
 
 ### Install Plugin
 
-1. Download the latest `caidofisher-plugin.zip` from Releases
+1. Download the latest `kingfisher-plugin.zip` from Releases
 2. In Caido, go to **Settings → Plugins → Local**
 3. Click **Install from file** and select the zip
 
 Or build from source:
 
 ```bash
-cd plugins/Caidofisher
 pnpm install
 pnpm run build
 ```
@@ -37,8 +36,8 @@ pnpm run build
 
 1. Open **HTTP History** or any view with HTTP requests
 2. Select one or more requests
-3. Right-click and select **Scan with Caidofisher**
-4. View results in the **Caidofisher** sidebar panel
+3. Right-click and select **Scan with Kingfisher**
+4. View results in the **Kingfisher** sidebar panel
 
 ### Dashboard
 
@@ -53,6 +52,7 @@ The sidebar dashboard shows:
 - **Clear All**: Remove all findings
 - **Export JSON**: Download findings as a JSON file
 - **Refresh**: Reload findings from backend
+- **Install/Upgrade Kingfisher**: Manually trigger Kingfisher binary setup
 
 ## Supported Secrets
 
@@ -80,7 +80,7 @@ Currently, the plugin uses Kingfisher's default settings. Future versions may in
 
 ### Kingfisher Binary Not Found
 
-Caidofisher will attempt to auto-install Kingfisher on first use. If installation fails:
+Kingfisher will attempt to auto-install on first use. If installation fails:
 
 #### macOS / Linux
 ```bash
@@ -91,7 +91,7 @@ curl -sL https://raw.githubusercontent.com/mongodb/kingfisher/main/scripts/insta
 Ensure `~/.local/bin` is in your PATH.
 
 #### Windows
-Caidofisher will download the `kingfisher-windows-x64.zip` and extract it to `%USERPROFILE%\.local\bin\kingfisher.exe`.
+Kingfisher will be downloaded and extracted to `%USERPROFILE%\.local\bin\kingfisher.exe`.
 
 If auto-install fails, you can:
 1. Download `kingfisher-windows-x64.zip` from [Kingfisher Releases](https://github.com/mongodb/kingfisher/releases)

@@ -14,7 +14,7 @@ let findingsStore: FindingsStore;
 let scanner: KingfisherScanner;
 
 export async function init(sdk: SDK) {
-  sdk.console.log("[Caidofisher] Backend init starting...");
+  sdk.console.log("[Kingfisher] Backend init starting...");
   
   try {
     findingsStore = new FindingsStore();
@@ -30,7 +30,7 @@ export async function init(sdk: SDK) {
           return [];
         }
 
-        sdkInstance.console.log(`[Caidofisher] API: scanRequests started for ${ids.length} requests`);
+        sdkInstance.console.log(`[Kingfisher] API: scanRequests started for ${ids.length} requests`);
         const results = await scanner.scan(sdkInstance, ids);
 
         // Store findings
@@ -44,12 +44,12 @@ export async function init(sdk: SDK) {
 
         const duration = Date.now() - start;
         sdkInstance.console.log(
-          `[Caidofisher] API: scanRequests finished in ${duration}ms. Added ${newFindingsCount} findings to store.`
+          `[Kingfisher] API: scanRequests finished in ${duration}ms. Added ${newFindingsCount} findings to store.`
         );
 
         return results;
       } catch (error: unknown) {
-        sdkInstance.console.error("[Caidofisher] API: scanRequests failed:", error);
+        sdkInstance.console.error("[Kingfisher] API: scanRequests failed:", error);
         return [];
       }
     });
@@ -59,10 +59,10 @@ export async function init(sdk: SDK) {
       try {
         if (!findingsStore) return [];
         const findings = findingsStore.getAll();
-        sdkInstance.console.log(`[Caidofisher] API: getFindings returning ${findings.length} items`);
+        sdkInstance.console.log(`[Kingfisher] API: getFindings returning ${findings.length} items`);
         return findings;
       } catch (error: unknown) {
-        sdkInstance.console.error("[Caidofisher] API: getFindings failed:", error);
+        sdkInstance.console.error("[Kingfisher] API: getFindings failed:", error);
         return [];
       }
     });
@@ -73,9 +73,9 @@ export async function init(sdk: SDK) {
         if (!findingsStore) return;
         const count = findingsStore.getAll().length;
         findingsStore.clear();
-        sdkInstance.console.log(`[Caidofisher] API: clearFindings removed ${count} items.`);
+        sdkInstance.console.log(`[Kingfisher] API: clearFindings removed ${count} items.`);
       } catch (error: unknown) {
-        sdkInstance.console.error("[Caidofisher] API: clearFindings failed:", error);
+        sdkInstance.console.error("[Kingfisher] API: clearFindings failed:", error);
       }
     });
 
@@ -84,10 +84,10 @@ export async function init(sdk: SDK) {
       try {
         if (!findingsStore) return "[]";
         const findings = findingsStore.getAll();
-        sdkInstance.console.log(`[Caidofisher] API: exportFindings exporting ${findings.length} items`);
+        sdkInstance.console.log(`[Kingfisher] API: exportFindings exporting ${findings.length} items`);
         return JSON.stringify(findings, null, 2);
       } catch (error: unknown) {
-        sdkInstance.console.error("[Caidofisher] API: exportFindings failed:", error);
+        sdkInstance.console.error("[Kingfisher] API: exportFindings failed:", error);
         return "[]";
       }
     });
@@ -100,13 +100,13 @@ export async function init(sdk: SDK) {
         }
         const stats = findingsStore.getStats();
         const version = await scanner.getVersion();
-        sdkInstance.console.log(`[Caidofisher] API: getStats (Findings: ${stats.totalFindings}, Scanned: ${stats.totalScanned}, Kingfisher: ${version || "N/A"})`);
+        sdkInstance.console.log(`[Kingfisher] API: getStats (Findings: ${stats.totalFindings}, Scanned: ${stats.totalScanned}, Kingfisher: ${version || "N/A"})`);
         return {
           ...stats,
           kingfisherVersion: version ?? undefined,
         };
       } catch (error: unknown) {
-        sdkInstance.console.error("[Caidofisher] API: getStats failed:", error);
+        sdkInstance.console.error("[Kingfisher] API: getStats failed:", error);
         return {
           totalScanned: 0,
           totalFindings: 0,
@@ -116,16 +116,16 @@ export async function init(sdk: SDK) {
 
     // Register API: installKingfisher
     api.register("installKingfisher", async (sdkInstance: SDK) => {
-      sdkInstance.console.log("[Caidofisher] API: installKingfisher started");
+      sdkInstance.console.log("[Kingfisher] API: installKingfisher started");
       const start = Date.now();
       try {
         if (!scanner) throw new Error("Scanner not initialized");
         const result = await scanner.installKingfisher(sdkInstance);
         const duration = Date.now() - start;
-        sdkInstance.console.log(`[Caidofisher] API: installKingfisher finished in ${duration}ms (Success: ${result.success})`);
+        sdkInstance.console.log(`[Kingfisher] API: installKingfisher finished in ${duration}ms (Success: ${result.success})`);
         return result;
       } catch (error: unknown) {
-        sdkInstance.console.error("[Caidofisher] API: installKingfisher failed:", error);
+        sdkInstance.console.error("[Kingfisher] API: installKingfisher failed:", error);
         return {
           success: false,
           output: `Error: ${error instanceof Error ? error.message : String(error)}`,
@@ -136,13 +136,13 @@ export async function init(sdk: SDK) {
     // Check Kingfisher availability on startup
     try {
       const version = await scanner.getVersion();
-      sdk.console.log(`[Caidofisher] Backend initialized. Kingfisher version: ${version || "not found"}`);
+      sdk.console.log(`[Kingfisher] Backend initialized. Kingfisher version: ${version || "not found"}`);
     } catch (error) {
-      sdk.console.warn("[Caidofisher] Kingfisher binary not found. Install will be attempted on first scan.");
+      sdk.console.warn("[Kingfisher] Kingfisher binary not found. Install will be attempted on first scan.");
     }
 
-    sdk.console.log("[Caidofisher] Backend ready.");
+    sdk.console.log("[Kingfisher] Backend ready.");
   } catch (error) {
-    sdk.console.error("[Caidofisher] Global init error:", error);
+    sdk.console.error("[Kingfisher] Global init error:", error);
   }
 }

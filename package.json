@@ -1,6 +1,6 @@
 {
-  "name": "@caido-community/caidofisher",
-  "version": "1.0.6",
+  "name": "@caido-community/kingfisher",
+  "version": "1.0.7",
   "author": "aleister1102",
   "private": true,
   "type": "module",
